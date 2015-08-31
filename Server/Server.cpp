@@ -1,21 +1,19 @@
-// NetworkDemo.cpp : Defines the entry point for the console application.
+// MyConsoleApplication.cpp : Defines the entry point for the console application.
 //
 
 #include "stdafx.h"
-#include <assert.h>
-#include "TcpChanel.h"
-
+#include "TcpServer.h"
 #pragma comment(lib, "ws2_32.lib")
 
-class MyTcpListener : public TcpListener
+class MyTcpListener : public TcpServerListener
 {
 public:
-	virtual void OnConnected(bool success)
+	virtual void OnConnected(TcpChanel* chanel)
 	{
-		int i; 
+		int i;
 		i = 0;
 	}
-	virtual void OnBufferReceived(const char* input_data, int input_data_len)
+	virtual void OnBufferReceived(TcpChanel* chanel, const char* input_data, int input_data_len)
 	{
 		int i;
 		i = 0;
@@ -32,7 +30,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	WSADATA wsd;
 
 	int rc;
-	
+
 	// Load Winsock
 	rc = WSAStartup(MAKEWORD(2, 2), &wsd);
 	if (rc != 0) {
@@ -42,12 +40,12 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	MyTcpListener listener;
 	IOThread thread;
-	TcpChanel chanel(&listener, &thread);
+	TcpServer server(&listener, &thread);
 
 	thread.Start();
 
 
-	chanel.Connect("180.97.33.107", 80);
+	server.Listen(33333);
 
 	thread.Wait(INFINITE);
 

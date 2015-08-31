@@ -1,5 +1,5 @@
 #include "stdafx.h"
-#include "TcpChanel.h"
+#include "TcpChannel.h"
 #include <MSWSock.h>
 #include <assert.h>
 
@@ -69,7 +69,7 @@ static bool GetDisConnectEx(SOCKET sock, LPFN_DISCONNECTEX& pFunc)
 	}
 	return true;
 }
-TcpChanel::TcpChanel( TcpListener* listener, IOThread* thread )
+TcpChannel::TcpChannel( TcpListener* listener, IOThread* thread )
 : socket_(INVALID_SOCKET)
 , listener_(listener)
 , thread_(thread)
@@ -84,7 +84,7 @@ TcpChanel::TcpChanel( TcpListener* listener, IOThread* thread )
 	CreateSocket();
 }
 
-TcpChanel::TcpChanel(SOCKET socket, TcpListener* listener, IOThread* thread)
+TcpChannel::TcpChannel(SOCKET socket, TcpListener* listener, IOThread* thread)
 : socket_(socket)
 , listener_(listener)
 , thread_(thread)
@@ -95,15 +95,16 @@ TcpChanel::TcpChanel(SOCKET socket, TcpListener* listener, IOThread* thread)
 , disconnect_state_(this)
 , processing_incoming_(false)
 {
+	memset(input_buf_, 0, sizeof(input_buf_));
 	thread_->RegisterIOHandler((HANDLE)socket_, this);
 }
 
-TcpChanel::~TcpChanel()
+TcpChannel::~TcpChannel()
 {
 	Close();
 }
 
-void TcpChanel::Close()
+void TcpChannel::Close()
 {
 	if (input_state_.is_pending || output_state_.is_pending)
 		CancelIo((HANDLE)socket_);
@@ -128,7 +129,7 @@ void TcpChanel::Close()
 	}
 }
 
-bool TcpChanel::Connect(const char* addr, unsigned port)
+bool TcpChannel::Connect(const char* addr, unsigned port)
 {
 	if (socket_ == INVALID_SOCKET)
 		return false;
@@ -159,7 +160,7 @@ bool TcpChanel::Connect(const char* addr, unsigned port)
 	return false;
 }
 
-bool TcpChanel::Disconnect()
+bool TcpChannel::Disconnect()
 {
 	if (socket_ == INVALID_SOCKET)
 		return true;
@@ -186,7 +187,7 @@ bool TcpChanel::Disconnect()
 	return false;
 }
 
-bool TcpChanel::Send( IOBuffer* buffer )
+bool TcpChannel::Send( IOBuffer* buffer )
 {
 	buffer->AddRef();
 	output_queue_.push(buffer);
@@ -200,7 +201,7 @@ bool TcpChanel::Send( IOBuffer* buffer )
 	return true;
 }
 
-void TcpChanel::CreateSocket()
+void TcpChannel::CreateSocket()
 {
 	socket_ = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	assert(socket_ != INVALID_SOCKET);
@@ -218,7 +219,7 @@ void TcpChanel::CreateSocket()
 	}
 }
 
-void TcpChanel::OnIOCompleted( IOThread::IOContext* context, DWORD bytes_transfered, DWORD error )
+void TcpChannel::OnIOCompleted( IOThread::IOContext* context, DWORD bytes_transfered, DWORD error )
 {
 	bool ok = true;
 	//assert(thread_check_->CalledOnValidThread());
@@ -229,10 +230,10 @@ void TcpChanel::OnIOCompleted( IOThread::IOContext* context, DWORD bytes_transfe
 		{
 			if (error == 0) {
 				connected_ = true;
-				listener_->OnConnected(true);
+				listener_->OnConnected(this, true);
 			}
 			else {
-				listener_->OnConnected(false);
+				listener_->OnConnected(this, false);
 				return;
 			}
 
@@ -270,12 +271,12 @@ void TcpChanel::OnIOCompleted( IOThread::IOContext* context, DWORD bytes_transfe
 	if (!ok && INVALID_SOCKET != socket_) {
 		// We don't want to re-enter Close().
 		Close();
-		listener_->OnError(error);
+		listener_->OnError(this, error);
 		//listener()->OnChannelError();
 	}
 }
 
-bool TcpChanel::ProcessOutgoingMessages( IOThread::IOContext* context, DWORD bytes_written )
+bool TcpChannel::ProcessOutgoingMessages( IOThread::IOContext* context, DWORD bytes_written )
 {
 	assert(connected_);  // Why are we trying to send messages if there's
 	// no connection?
@@ -332,7 +333,7 @@ bool TcpChanel::ProcessOutgoingMessages( IOThread::IOContext* context, DWORD byt
 	return true;
 }
 
-bool TcpChanel::ProcessIncomingMessages()
+bool TcpChannel::ProcessIncomingMessages()
 {
 	while (true) {
 		int bytes_read = 0;
@@ -349,12 +350,12 @@ bool TcpChanel::ProcessIncomingMessages()
 	}
 }
 
-bool TcpChanel::AsyncReadComplete( int bytes_read )
+bool TcpChannel::AsyncReadComplete( int bytes_read )
 {
 	return DispatchInputData(input_buf_, bytes_read);
 }
 
-TcpChanel::ReadState TcpChanel::InternalReadData( char* buffer, int buffer_len, int* bytes_read )
+TcpChannel::ReadState TcpChannel::InternalReadData( char* buffer, int buffer_len, int* bytes_read )
 {
 	if (INVALID_SOCKET == socket_)
 		return READ_FAILED;
@@ -387,22 +388,22 @@ TcpChanel::ReadState TcpChanel::InternalReadData( char* buffer, int buffer_len, 
 	return READ_PENDING;
 }
 
-bool TcpChanel::DispatchInputData( const char* input_data, int input_data_len )
+bool TcpChannel::DispatchInputData( const char* input_data, int input_data_len )
 {
-	listener_->OnBufferReceived(input_data, input_data_len);
+	listener_->OnBufferReceived(this, input_data, input_data_len);
 	return true;
 }
 
 
 
-TcpChanel::State::State( TcpChanel* channel )
+TcpChannel::State::State( TcpChannel* channel )
 : is_pending(false)
 {
 	memset(&context.overlapped, 0, sizeof(context.overlapped));
 	context.handler = channel;
 }
 
-TcpChanel::State::~State()
+TcpChannel::State::~State()
 {
 
 }

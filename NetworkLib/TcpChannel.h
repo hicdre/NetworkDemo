@@ -8,17 +8,17 @@ class TcpListener
 {
 public:
 	virtual ~TcpListener() {}
-	virtual void OnConnected(bool success) = 0;
-	virtual void OnBufferReceived(const char* input_data, int input_data_len) = 0;
-	virtual void OnError(DWORD err) = 0;
+	virtual void OnConnected(TcpChannel*channel, bool success) = 0;
+	virtual void OnBufferReceived(TcpChannel*channel, const char* input_data, int input_data_len) = 0;
+	virtual void OnError(TcpChannel*channel, DWORD err) = 0;
 };
 
-class TcpChanel : public IOThread::IOHandler
+class TcpChannel : public IOThread::IOHandler
 {
 public:
-	TcpChanel(TcpListener* listener, IOThread* thread);
-	TcpChanel(SOCKET socket, TcpListener* listener, IOThread* thread);
-	~TcpChanel();
+	TcpChannel(TcpListener* listener, IOThread* thread);
+	TcpChannel(SOCKET socket, TcpListener* listener, IOThread* thread);
+	~TcpChannel();
 
 	void Close();
 
@@ -29,8 +29,9 @@ public:
 	virtual void OnIOCompleted(IOThread::IOContext* context, DWORD bytes_transfered,
 		DWORD error) override;
 private:
+	friend class TcpServer;
 	struct State {
-		explicit State(TcpChanel* channel);
+		explicit State(TcpChannel* channel);
 		~State();
 		IOThread::IOContext context;
 		bool is_pending;
